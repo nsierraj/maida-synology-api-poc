@@ -53,7 +53,10 @@ def main() -> None:
             sort_direction="desc",
             additional=["size", "time", "type"],
         )
-        files = listing.get("files", [])
+        entries = listing.get("files", [])
+        # DSM system folders (#recycle, #snapshot, @eaDir) aren't user content.
+        files = [f for f in entries if not f["name"].startswith(("#", "@"))]
+        hidden = len(entries) - len(files)
         if not files:
             print("    (empty: drop a file into the share via DSM to see something here)")
         for f in files:
@@ -61,18 +64,21 @@ def main() -> None:
             kind = "dir " if f["isdir"] else "file"
             size = "-" if f["isdir"] else human(add.get("size"))
             print(f"    {kind} {f['name']:<36} {size:>10}  {ts(add.get('time', {}).get('mtime'))}")
-        print(f"    total: {listing.get('total')}")
+        print(f"    total: {listing.get('total')}" + (f" ({hidden} system folder(s) hidden)" if hidden else ""))
 
         if files:
-            first = files[0]["path"]
+            # Prefer a regular file so getinfo shows size/type, else the newest folder.
+            first = next((f for f in files if not f["isdir"]), files[0])["path"]
             print(f"\n[3] List.getinfo: {first}")
             detail = client.call(
                 "SYNO.FileStation.List",
                 "getinfo",
                 path=[first],
-                additional=["real_path", "owner", "perm"],
+                additional=["real_path", "size", "owner", "perm", "type"],
             )
             print(json.dumps(detail.get("files", [])[0], indent=2))
+        else:
+            print("\n[3] List.getinfo: skipped (nothing in the sandbox to inspect)")
 
         print(f"\n[4] List.list on a path this user should not read: {settings.denied_path}")
         try:
