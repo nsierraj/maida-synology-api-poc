@@ -4,6 +4,9 @@ Condensed, searchable reference transcribed from the official
 [Synology File Station API Guide](./Synology_File_Station_API_Guide.pdf) (revision 2023.03, covers DSM 6.0 / 7.x).
 The PDF is the source of truth; page numbers below refer to the PDF's printed page numbers.
 
+Source: <https://global.download.synology.com/download/Document/Software/DeveloperGuide/Package/FileStation/All/enu/Synology_File_Station_API_Guide.pdf>
+(official Synology download; the copy in this folder was taken from it).
+
 > The guide is proprietary Synology documentation (personal-use storage permitted). Keep this repo private.
 
 ---

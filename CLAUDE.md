@@ -4,11 +4,19 @@ Proof of concept against the Synology DSM File Station Web API.
 
 ## Code
 
-- `README.md` — NAS setup, TLS pinning, how to run the examples.
-- `src/synology_poc/` — `SynologyClient` (client.py), error tables (errors.py), `.env` loading (config.py), sandbox helpers (sandbox.py).
+- `README.md` — NAS setup, TLS pinning, how to run the examples, tests and MCP server.
+- `src/synology_poc/` — `SynologyClient` (client.py), `FileStation` use-case library (filestation.py), `PathPolicy` (policy.py), error tables (errors.py), `.env` loading (config.py), example helpers (sandbox.py).
+- `src/synology_mcp/server.py` — MCP server (`uv run synology-mcp`), read-only unless enabled.
 - `examples/01–05` — discovery/login, read-only browsing, sandboxed file lifecycle, async jobs, sharing + thumbnails. Run with `uv run`.
+- `tests/` — `uv run pytest`; `fake_nas.py` reproduces observed DSM 7 quirks. Keep it in sync when you learn a new one.
+
+## Use cases and MCP
+
+- `docs/use-cases.md` — every verified use case: calls, encoding, quirks, library method, MCP tool.
+- `docs/mcp-server.md` — MCP server setup, tools, safety model, how to add a tool.
+- New NAS operations: FileStation method + fake + test first, prove on the real NAS via an example, then expose as a tool.
 
 ## API reference
 
 - `docs/synology/file-station-api.md` — condensed, searchable reference (methods, params, error codes, and known errata in the official guide). Read this first.
-- `docs/synology/Synology_File_Station_API_Guide.pdf` — official Synology guide (rev. 2023.03), the source of truth.
+- `docs/synology/Synology_File_Station_API_Guide.pdf` — official Synology guide (rev. 2023.03), the source of truth. Downloaded from <https://global.download.synology.com/download/Document/Software/DeveloperGuide/Package/FileStation/All/enu/Synology_File_Station_API_Guide.pdf>

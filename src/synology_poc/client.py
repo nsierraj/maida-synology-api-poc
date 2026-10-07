@@ -41,6 +41,10 @@ DOC_VERSIONS = {
 }
 
 
+# Session expired, interrupted by duplicate login, SID not found: a fresh login fixes these.
+RELOGIN_CODES = {106, 107, 119}
+
+
 class FingerprintAdapter(HTTPAdapter):
     """Pin the server certificate by SHA-256 fingerprint (urllib3 assert_fingerprint).
 
@@ -95,6 +99,7 @@ class SynologyClient:
             self.session.verify = ca_cert
         self.apis: dict[str, dict[str, Any]] = {}
         self.sid: str | None = None
+        self._credentials: tuple[str, str] | None = None  # kept in memory for re-login
 
     # -- context manager: always log out --------------------------------------
     def __enter__(self) -> SynologyClient:
@@ -140,7 +145,8 @@ class SynologyClient:
     # -- auth ------------------------------------------------------------------
     def login(self, account: str, passwd: str) -> str:
         # POST so the password never appears in a URL or access log.
-        data = self.call(
+        self.sid = None
+        data = self._call_once(
             "SYNO.API.Auth",
             "login",
             account=account,
@@ -149,14 +155,33 @@ class SynologyClient:
             format="sid",
         )
         self.sid = data["sid"]
+        self._credentials = (account, passwd)
         return self.sid
 
     def logout(self) -> None:
-        self.call("SYNO.API.Auth", "logout", session="FileStation")
-        self.sid = None
+        try:
+            self._call_once("SYNO.API.Auth", "logout", session="FileStation")
+        finally:
+            self.sid = None
+            self._credentials = None
+
+    def _relogin_and_retry(self, fn: Any) -> Any:
+        """Run fn(); if the session expired or was kicked (106/107/119), log in again once."""
+        try:
+            return fn()
+        except SynologyError as e:
+            if e.code not in RELOGIN_CODES or e.http_status or self._credentials is None:
+                raise
+            self.login(*self._credentials)
+            return fn()
 
     # -- generic call ----------------------------------------------------------
     def call(self, api: str, method: str, **params: Any) -> dict[str, Any]:
+        if api == "SYNO.API.Auth":
+            return self._call_once(api, method, **params)
+        return self._relogin_and_retry(lambda: self._call_once(api, method, **params))
+
+    def _call_once(self, api: str, method: str, **params: Any) -> dict[str, Any]:
         form = {"api": api, "version": self.version(api), "method": method}
         form.update({k: encode(v) for k, v in params.items() if v is not None})
         if self.sid:
@@ -176,16 +201,32 @@ class SynologyClient:
     def upload(
         self,
         dest_folder: str,
-        local_path: str | os.PathLike,
+        source: str | os.PathLike | bytes,
         *,
+        filename: str | None = None,
         overwrite: str | None = "overwrite",
         create_parents: bool = True,
     ) -> dict[str, Any]:
         """Multipart upload (RFC 1867). requests puts `data` fields first, the file part last.
 
+        source: a local path, or bytes together with `filename`.
         overwrite: "overwrite" | "skip" | None (None = omit; a conflict is rejected:
         1805 per the guide, 414 observed on DSM 7).
         """
+        if isinstance(source, bytes):
+            if not filename:
+                raise ValueError("filename is required when uploading bytes")
+            payload, name = source, filename
+        else:
+            path = Path(source)
+            payload, name = path.read_bytes(), filename or path.name
+        return self._relogin_and_retry(
+            lambda: self._upload_once(dest_folder, payload, name, overwrite, create_parents)
+        )
+
+    def _upload_once(
+        self, dest_folder: str, payload: bytes, name: str, overwrite: str | None, create_parents: bool
+    ) -> dict[str, Any]:
         api = "SYNO.FileStation.Upload"
         ver = self.version(api)
         query = {"api": api, "version": ver, "method": "upload", "_sid": self.sid}
@@ -193,12 +234,10 @@ class SynologyClient:
         if overwrite is not None:
             # v2 takes true/false, v3 takes overwrite/skip.
             form["overwrite"] = overwrite if ver >= 3 else encode(overwrite == "overwrite")
-        local_path = Path(local_path)
-        with local_path.open("rb") as fh:
-            files = {"file": (local_path.name, fh, "application/octet-stream")}
-            resp = self.session.post(
-                self._url(api), params=query, data=form, files=files, timeout=self.timeout
-            )
+        files = {"file": (name, payload, "application/octet-stream")}
+        resp = self.session.post(
+            self._url(api), params=query, data=form, files=files, timeout=self.timeout
+        )
         resp.raise_for_status()
         return self._unwrap(api, "upload", resp.json())
 
@@ -207,6 +246,9 @@ class SynologyClient:
 
         Errors arrive either as a JSON envelope (Download) or as an HTTP status (Thumb).
         """
+        return self._relogin_and_retry(lambda: self._fetch_binary_once(api, method, **params))
+
+    def _fetch_binary_once(self, api: str, method: str, **params: Any) -> tuple[bytes, str]:
         query = {"api": api, "version": self.version(api), "method": method, "_sid": self.sid}
         query.update({k: encode(v) for k, v in params.items() if v is not None})
         resp = self.session.get(self._url(api), params=query, timeout=self.timeout)

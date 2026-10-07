@@ -9,14 +9,15 @@ import posixpath
 from datetime import datetime
 
 from .client import SynologyClient
+from .policy import PathPolicy, PolicyError
 
 
 def guard(sandbox: str, path: str) -> str:
     """Refuse any remote path that is not strictly inside the sandbox share."""
-    norm = posixpath.normpath(path)
-    if not norm.startswith(sandbox.rstrip("/") + "/"):
-        raise SystemExit(f"Refusing to touch {path!r}: outside sandbox {sandbox!r}")
-    return norm
+    try:
+        return PathPolicy((sandbox,), allow_writes=True).check_write(path)
+    except PolicyError as e:
+        raise SystemExit(f"Refusing to touch {path!r}: {e}") from None
 
 
 def new_run_path(sandbox: str, prefix: str = "poc-run") -> str:
@@ -28,10 +29,11 @@ def step(n: int, text: str) -> None:
 
 
 def names_in(client: SynologyClient, folder: str) -> dict[str, dict]:
-    listing = client.call(
-        "SYNO.FileStation.List", "list", folder_path=folder, additional=["size"]
-    )
-    return {f["name"]: f for f in listing.get("files", [])}
+    """All entries in a folder by name (system folders included)."""
+    from .filestation import FileStation
+
+    listing = FileStation(client).list_folder(folder, additional=["size"], include_system=True)
+    return {f["name"]: f for f in listing["files"]}
 
 
 def progress(status: dict) -> None:
@@ -42,9 +44,9 @@ def progress(status: dict) -> None:
 
 def delete_folder(client: SynologyClient, sandbox: str, path: str) -> bool:
     """Async recursive Delete, then confirm the folder is no longer listed."""
-    task = client.call("SYNO.FileStation.Delete", "start",
-                       path=[guard(sandbox, path)], recursive=True, accurate_progress=True)
-    client.wait_task("SYNO.FileStation.Delete", task["taskid"], on_progress=progress)
+    from .filestation import FileStation
+
+    FileStation(client).delete(guard(sandbox, path), on_progress=progress)
     parent = posixpath.dirname(path)
     gone = posixpath.basename(path) not in names_in(client, parent)
     print(f"    removed from {parent}: {'yes' if gone else 'NO, still listed'}")

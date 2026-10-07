@@ -1,10 +1,16 @@
 # maida-synology-api-poc
 
-Proof of concept for the Synology **File Station** Web API (DSM 7.x), in Python.
-API reference: [docs/synology/file-station-api.md](docs/synology/file-station-api.md).
+Proof of concept for the Synology **File Station** Web API (DSM 7.x), in Python: a reusable
+library, runnable examples, and an MCP server.
+
+| Doc | Contents |
+| --- | --- |
+| [docs/use-cases.md](docs/use-cases.md) | The 20 use cases verified on a real NAS: API calls, encoding, DSM 7 quirks, implementation, MCP tool |
+| [docs/mcp-server.md](docs/mcp-server.md) | The MCP server: setup, tools, safety model, troubleshooting |
+| [docs/synology/file-station-api.md](docs/synology/file-station-api.md) | Condensed API reference plus errata against the official guide |
 
 | Example | What it shows | Writes to NAS? |
-|---------|---------------|----------------|
+| --- | --- | --- |
 | `01_discover_and_login.py` | `SYNO.API.Info` discovery, login, `FileStation.Info`, logout | No |
 | `02_browse.py` | List shares, list a folder, file details, error handling on a denied path | No |
 | `03_file_lifecycle.py` | Create folder → upload → conflict handling → rename → async copy → download + SHA-256 check → async delete | Only inside `SYNO_SANDBOX/poc-run-*` |
@@ -61,9 +67,29 @@ Notes:
 - Creating links requires the test user to have the sharing permission (DSM File Station → Settings). If it's missing, `05` stops with a hint.
 - Thumbnails, the QR code, and other local output go to `out/`, which is gitignored.
 
+## MCP server
+
+```bash
+claude mcp add synology -- uv run --directory "$PWD" synology-mcp
+```
+
+It's read-only by default. Write tools need `SYNO_MCP_ALLOW_WRITES=true` and stay inside `SYNO_MCP_ROOTS`, and share links need `SYNO_MCP_ALLOW_SHARING=true`. See [docs/mcp-server.md](docs/mcp-server.md).
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+The tests run the library, the examples, and the MCP server against `tests/fake_nas.py`, an in-memory DSM 7 that reproduces the quirks seen on the real NAS. The fake is lenient about parameter quoting, so a real-NAS run remains the final check.
+
 ## Code layout
 
-- `src/synology_poc/client.py`: `SynologyClient`. It handles discovery and versioning, login/logout, the generic `call()`, `upload()`, `download()`, and `wait_task()` for async jobs.
+- `src/synology_poc/client.py`: `SynologyClient`. It handles discovery and versioning, Auth v7 login/logout, re-login on expired sessions, the generic `call()`, `upload()`, `fetch_binary()`/`download()`, and `wait_task()` for async jobs.
+- `src/synology_poc/filestation.py`: `FileStation`, one method per use case. All DSM 7 wire-format knowledge lives here.
+- `src/synology_poc/policy.py`: `PathPolicy`, which keeps writes and share links inside allowed roots.
 - `src/synology_poc/errors.py`: `SynologyError` and the error code tables from the guide.
 - `src/synology_poc/config.py`: loads `.env` and connects with readable failures (TLS, network, login).
-- `src/synology_poc/sandbox.py`: helpers for writing examples (sandbox guard, run folder names, async delete).
+- `src/synology_poc/sandbox.py`: helpers for the examples (sandbox guard, run folder names, async delete).
+- `src/synology_mcp/server.py`: the MCP server (`synology-mcp`).
+- `tests/`: the fake NAS and the test suites.
