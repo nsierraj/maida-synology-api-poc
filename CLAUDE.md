@@ -36,6 +36,11 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 - **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo is public: never commit the proprietary Synology PDF or anything NAS-specific.
 - **Don't put the real NAS's IP, hostname, SIDs or passwords in docs or samples**; use the fake NAS (`fakenas`).
 
+## Releases
+
+- Versioning is SemVer; the version lives in `pyproject.toml`. Record changes under `[Unreleased]` in `CHANGELOG.md` in the same PR as the change.
+- To release: a PR moves `[Unreleased]` to a dated `[X.Y.Z]` section and bumps `pyproject.toml` (run `uv lock` too). After it merges, tag `vX.Y.Z` on `main` and create a GitHub release.
+
 ## Docs
 
 - `docs/mcp-explained.md`: plain-language MCP explainer for REST/web developers. Its JSON excerpts were copied by hand from `docs/mcp-wire-sample.md`. After changing tools or prompts, regenerate the sample, then update the excerpts and tool counts. A shareable web version is the private artifact <https://claude.ai/artifact/SRiQJJYYa8783aErNyu2Rn>, built from the same content; republish it alongside.
