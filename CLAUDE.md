@@ -5,7 +5,7 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 ## Commands
 
 - `uv sync`: install (Python ≥ 3.11, deps in `pyproject.toml` / `uv.lock`)
-- `uv run pytest`: the whole suite, against the fake NAS. Must pass before any commit.
+- `uv run pytest`: the whole suite, against the fake NAS. Must pass before any commit. CI runs it on Python 3.11–3.13.
 - `uv run examples/0N_*.py`: real-NAS runs. They need `.env` and are run by the user. Only 03–05 write, and only inside `SYNO_SANDBOX`.
 - `uv run synology-mcp`: the MCP server (stdio). It reads the same `.env`; `SYNO_MCP_*` flags enable writes and sharing.
 - `uv run python scripts/capture_mcp_wire.py`: regenerates `docs/mcp-wire-sample.md`.
@@ -26,6 +26,7 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 
 ## Rules that aren't obvious from the code
 
+- **All changes go through a pull request**, never a direct push to `main`. CI (`.github/workflows/ci.yml`) must be green. Workflows must not use secrets, `.env` or a real NAS.
 - **DSM 7 differs from the PDF guide.** When they disagree, trust `docs/synology/file-station-api.md` §7 (errata) and `docs/use-cases.md`. If an operation fails, capture the DSM web UI's request (browser DevTools) rather than guessing: that's how the Compress parameters were found.
 - **Keep Auth v7** (`client.DOC_VERSIONS`). On this NAS, sessions from Auth v3/v6 get 105 on Compress.
 - **The fake NAS accepts raw and JSON-quoted strings alike**, so passing tests can't prove the parameter encoding. New NAS calls need a real-NAS run (an example script inside the sandbox) before they're exposed as MCP tools.

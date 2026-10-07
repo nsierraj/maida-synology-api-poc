@@ -84,6 +84,8 @@ uv run pytest
 
 The tests run the library, the examples, and the MCP server against `tests/fake_nas.py`, an in-memory DSM 7 that reproduces the quirks seen on the real NAS. The fake is lenient about parameter quoting, so a real-NAS run remains the final check.
 
+CI (`.github/workflows/ci.yml`) runs the same suite on Python 3.11–3.13 for every pull request and push to `main`. It never touches a NAS.
+
 ## Code layout
 
 - `src/synology_poc/client.py`: `SynologyClient`. It handles discovery and versioning, Auth v7 login/logout, re-login on expired sessions, the generic `call()`, `upload()`, `fetch_binary()`/`download()`, and `wait_task()` for async jobs.
