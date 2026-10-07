@@ -5,7 +5,7 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 ## Commands
 
 - `uv sync`: install (Python ≥ 3.11, deps in `pyproject.toml` / `uv.lock`)
-- `uv run pytest`: the whole suite, against the fake NAS. Must pass before any commit.
+- `uv run pytest`: the whole suite, against the fake NAS. Must pass before any commit. CI runs it on Python 3.11–3.13.
 - `uv run examples/0N_*.py`: real-NAS runs. They need `.env` and are run by the user. Only 03–05 write, and only inside `SYNO_SANDBOX`.
 - `uv run synology-mcp`: the MCP server (stdio). It reads the same `.env`; `SYNO_MCP_*` flags enable writes and sharing.
 - `uv run python scripts/capture_mcp_wire.py`: regenerates `docs/mcp-wire-sample.md`.
@@ -26,13 +26,14 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 
 ## Rules that aren't obvious from the code
 
+- **All changes go through a pull request**, never a direct push to `main`. CI (`.github/workflows/ci.yml`) must be green. Workflows must not use secrets, `.env` or a real NAS.
 - **DSM 7 differs from the PDF guide.** When they disagree, trust `docs/synology/file-station-api.md` §7 (errata) and `docs/use-cases.md`. If an operation fails, capture the DSM web UI's request (browser DevTools) rather than guessing: that's how the Compress parameters were found.
 - **Keep Auth v7** (`client.DOC_VERSIONS`). On this NAS, sessions from Auth v3/v6 get 105 on Compress.
 - **The fake NAS accepts raw and JSON-quoted strings alike**, so passing tests can't prove the parameter encoding. New NAS calls need a real-NAS run (an example script inside the sandbox) before they're exposed as MCP tools.
 - **Order for new NAS operations:** `FileStation` method + fake + test → real-NAS example → MCP tool → docs (`use-cases.md`, `mcp-server.md`).
 - **Nothing in `synology_mcp` or the library may print to stdout**; with stdio, stdout is the protocol channel.
 - **`mcp` is 2.x:** `FastMCP` is now `mcp.server.mcpserver.MCPServer`, and annotations are `mcp_types.ToolAnnotations` (snake_case). Don't follow 1.x examples.
-- **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo must stay private because it contains the proprietary Synology PDF.
+- **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo is public: never commit the proprietary Synology PDF or anything NAS-specific.
 - **Don't put the real NAS's IP, hostname, SIDs or passwords in docs or samples**; use the fake NAS (`fakenas`).
 
 ## Docs
@@ -44,4 +45,4 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 ## API reference
 
 - `docs/synology/file-station-api.md`: condensed reference (methods, params, error codes) plus the DSM 7 errata in §7. Read this first.
-- `docs/synology/Synology_File_Station_API_Guide.pdf`: the official guide (rev. 2023.03), downloaded from <https://global.download.synology.com/download/Document/Software/DeveloperGuide/Package/FileStation/All/enu/Synology_File_Station_API_Guide.pdf>. It's the base spec, but the errata override it for DSM 7.
+- The official guide (rev. 2023.03) is not stored in the repo (proprietary). Download it from <https://global.download.synology.com/download/Document/Software/DeveloperGuide/Package/FileStation/All/enu/Synology_File_Station_API_Guide.pdf>. It's the base spec, but the errata override it for DSM 7.
