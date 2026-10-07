@@ -36,10 +36,19 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 - **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo is public: never commit the proprietary Synology PDF or anything NAS-specific.
 - **Don't put the real NAS's IP, hostname, SIDs or passwords in docs or samples**; use the fake NAS (`fakenas`).
 
+## Repo workflow
+
+- The repo is public (`nsierraj/maida-synology-api-poc`, default branch `main`).
+- **Branch protection on `main`:** changes need a PR and green checks `test (py3.11)`, `test (py3.12)`, `test (py3.13)`. Force-push and deletion are blocked. Admins are not enforced, so don't push to `main` directly anyway.
+- Work on a branch, open a PR, wait for CI (`gh pr checks --watch`), then squash-merge with `gh pr merge --squash --delete-branch`.
+- **CI** (`.github/workflows/ci.yml`): `uv sync --locked` then `uv run pytest`, on pull requests and pushes to `main`. Pin actions to a full version tag; some, like `astral-sh/setup-uv`, have no floating major tag. If `uv.lock` is out of date, CI fails; run `uv lock`.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly PRs for GitHub Actions and `uv` dependencies. Review them like any other PR.
+
 ## Releases
 
-- Versioning is SemVer; the version lives in `pyproject.toml`. Record changes under `[Unreleased]` in `CHANGELOG.md` in the same PR as the change.
-- To release: a PR moves `[Unreleased]` to a dated `[X.Y.Z]` section and bumps `pyproject.toml` (run `uv lock` too). After it merges, tag `vX.Y.Z` on `main` and create a GitHub release.
+- SemVer; the version lives in `pyproject.toml`. Record changes under `[Unreleased]` in `CHANGELOG.md` in the same PR as the change.
+- To release: a PR moves `[Unreleased]` to a dated `[X.Y.Z]` section, bumps `pyproject.toml` and runs `uv lock`. After it merges, tag `main` (`git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`) and run `gh release create vX.Y.Z` with that section as the notes.
+- Nothing is published to PyPI.
 
 ## Docs
 
