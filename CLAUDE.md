@@ -2,6 +2,12 @@
 
 Proof of concept against the Synology DSM File Station Web API.
 
+## Code
+
+- `README.md` — NAS setup, TLS pinning, how to run the examples.
+- `src/synology_poc/` — `SynologyClient` (client.py), error tables (errors.py), `.env` loading (config.py).
+- `examples/01–03` — discovery/login, read-only browsing, sandboxed file lifecycle. Run with `uv run`.
+
 ## API reference
 
 - `docs/synology/file-station-api.md` — condensed, searchable reference (methods, params, error codes, and known errata in the official guide). Read this first.

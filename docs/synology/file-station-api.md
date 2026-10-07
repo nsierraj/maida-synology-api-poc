@@ -403,4 +403,6 @@ The guide has a number of copy-paste errors. Trust the parameter tables over the
 - Search `pattern` uses **space** to separate globs, while List `pattern` and Search `extension` use **comma**.
 - Search `list` default `limit=0` returns no rows; pass `limit=-1` (or a page size).
 - `Favorite` `list` table shows the sort-field enum under `additional`; the valid `additional` values are the ones described in its text (real_path, owner, time, perm, mount_point_type).
+- **Observed on DSM 7 (2026-10, this project's NAS):** Upload v3 with `overwrite` omitted and an existing target returns **414** (common "File already exists"), not 1805. Handle both.
+- **Observed on DSM 7:** `FileStation.Info.get` returns `support_virtual_protocol` as a JSON array (e.g. `[]`), not a comma-separated string.
 - Upload/Search/etc. timestamps differ: Upload uses **milliseconds**; Search filters and `time` objects use **seconds**.
