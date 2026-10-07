@@ -33,7 +33,7 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 - **Order for new NAS operations:** `FileStation` method + fake + test → real-NAS example → MCP tool → docs (`use-cases.md`, `mcp-server.md`).
 - **Nothing in `synology_mcp` or the library may print to stdout**; with stdio, stdout is the protocol channel.
 - **`mcp` is 2.x:** `FastMCP` is now `mcp.server.mcpserver.MCPServer`, and annotations are `mcp_types.ToolAnnotations` (snake_case). Don't follow 1.x examples.
-- **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo must stay private because it contains the proprietary Synology PDF.
+- **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo is public: never commit the proprietary Synology PDF or anything NAS-specific.
 - **Don't put the real NAS's IP, hostname, SIDs or passwords in docs or samples**; use the fake NAS (`fakenas`).
 
 ## Docs
@@ -45,4 +45,4 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 ## API reference
 
 - `docs/synology/file-station-api.md`: condensed reference (methods, params, error codes) plus the DSM 7 errata in §7. Read this first.
-- `docs/synology/Synology_File_Station_API_Guide.pdf`: the official guide (rev. 2023.03), downloaded from <https://global.download.synology.com/download/Document/Software/DeveloperGuide/Package/FileStation/All/enu/Synology_File_Station_API_Guide.pdf>. It's the base spec, but the errata override it for DSM 7.
+- The official guide (rev. 2023.03) is not stored in the repo (proprietary). Download it from <https://global.download.synology.com/download/Document/Software/DeveloperGuide/Package/FileStation/All/enu/Synology_File_Station_API_Guide.pdf>. It's the base spec, but the errata override it for DSM 7.
