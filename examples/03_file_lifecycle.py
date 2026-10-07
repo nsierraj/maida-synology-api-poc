@@ -16,35 +16,11 @@ from datetime import datetime
 from pathlib import Path
 
 from synology_poc import Settings, SynologyClient, SynologyError, connect
-
-
-def guard(sandbox: str, path: str) -> str:
-    """Refuse any remote path that is not strictly inside the sandbox share."""
-    norm = posixpath.normpath(path)
-    if not norm.startswith(sandbox.rstrip("/") + "/"):
-        raise SystemExit(f"Refusing to touch {path!r}: outside sandbox {sandbox!r}")
-    return norm
+from synology_poc.sandbox import delete_folder, guard, names_in, new_run_path, progress, step
 
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def step(n: int, text: str) -> None:
-    print(f"\n[{n}] {text}")
-
-
-def names_in(client: SynologyClient, folder: str) -> dict[str, dict]:
-    listing = client.call(
-        "SYNO.FileStation.List", "list", folder_path=folder, additional=["size"]
-    )
-    return {f["name"]: f for f in listing.get("files", [])}
-
-
-def progress(status: dict) -> None:
-    pct = status.get("progress")
-    if pct is not None:
-        print(f"    … {pct * 100:5.1f}%  finished={status.get('finished')}")
 
 
 def run(client: SynologyClient, sandbox: str, run_path: str, workdir: Path) -> None:
@@ -103,11 +79,7 @@ def run(client: SynologyClient, sandbox: str, run_path: str, workdir: Path) -> N
 
 def cleanup(client: SynologyClient, sandbox: str, run_path: str) -> None:
     step(7, f"Delete.start {run_path} (recursive, async)")
-    task = client.call("SYNO.FileStation.Delete", "start",
-                       path=[guard(sandbox, run_path)], recursive=True, accurate_progress=True)
-    client.wait_task("SYNO.FileStation.Delete", task["taskid"], on_progress=progress)
-    gone = posixpath.basename(run_path) not in names_in(client, sandbox)
-    print(f"    removed from {sandbox}: {'yes' if gone else 'NO, still listed'}")
+    delete_folder(client, sandbox, run_path)
 
 
 def main() -> None:
@@ -117,7 +89,7 @@ def main() -> None:
 
     settings = Settings.from_env()
     sandbox = settings.sandbox
-    run_path = guard(sandbox, f"{sandbox}/poc-run-{datetime.now():%Y%m%d-%H%M%S}")
+    run_path = new_run_path(sandbox)
 
     with connect(settings) as client, tempfile.TemporaryDirectory() as tmp:
         try:

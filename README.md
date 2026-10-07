@@ -8,6 +8,8 @@ API reference: [docs/synology/file-station-api.md](docs/synology/file-station-ap
 | `01_discover_and_login.py` | `SYNO.API.Info` discovery, login, `FileStation.Info`, logout | No |
 | `02_browse.py` | List shares, list a folder, file details, error handling on a denied path | No |
 | `03_file_lifecycle.py` | Create folder → upload → conflict handling → rename → async copy → download + SHA-256 check → async delete | Only inside `SYNO_SANDBOX/poc-run-*` |
+| `04_async_tasks.py` | Background jobs (start → poll → result): folder size, MD5, search, compress, list archive, extract + MD5 check, task list | Only inside `SYNO_SANDBOX/poc-run-*` (self-cleaning) |
+| `05_sharing_and_thumbs.py` | Thumbnails saved to `out/`, password-protected sharing link: create → getinfo → edit expiry → list | `SYNO_SANDBOX/poc-share-*`, **left active** until `--cleanup` |
 
 ## 1. Prepare the NAS (one time)
 
@@ -47,10 +49,21 @@ uv run examples/01_discover_and_login.py
 uv run examples/02_browse.py
 uv run examples/03_file_lifecycle.py --keep   # inspect poc-run-* in File Station, then:
 uv run examples/03_file_lifecycle.py
+uv run examples/04_async_tasks.py             # add --keep to inspect poc-run-* afterwards
+uv run examples/05_sharing_and_thumbs.py      # prints the link URL + password; open it in a browser
+uv run examples/05_sharing_and_thumbs.py --cleanup
 ```
+
+Notes:
+
+- If QuickConnect is enabled, `05`'s link is a `gofile.me` URL that is **reachable from the internet** (password-protected). Run `--cleanup` once you've tried it.
+- `05` leaves the share link and its `poc-share-*` folder in place on purpose. The link expires the next day, but run `--cleanup` to remove it sooner. Deleting the folder by hand would leave a "broken" link behind.
+- Creating links requires the test user to have the sharing permission (DSM File Station → Settings). If it's missing, `05` stops with a hint.
+- Thumbnails, the QR code, and other local output go to `out/`, which is gitignored.
 
 ## Code layout
 
 - `src/synology_poc/client.py`: `SynologyClient`. It handles discovery and versioning, login/logout, the generic `call()`, `upload()`, `download()`, and `wait_task()` for async jobs.
 - `src/synology_poc/errors.py`: `SynologyError` and the error code tables from the guide.
 - `src/synology_poc/config.py`: loads `.env` and connects with readable failures (TLS, network, login).
+- `src/synology_poc/sandbox.py`: helpers for writing examples (sandbox guard, run folder names, async delete).

@@ -19,7 +19,9 @@ from .errors import SynologyError
 # Versions this PoC is written against (from the guide). The actual version used is
 # clamped to what the NAS advertises via SYNO.API.Info.
 DOC_VERSIONS = {
-    "SYNO.API.Auth": 3,
+    # The guide documents Auth v3, but on DSM 7 a session from an Auth v3 or v6 login gets
+    # 105 on SYNO.FileStation.Compress; an Auth v7 login works (verified on the real NAS).
+    "SYNO.API.Auth": 7,
     "SYNO.FileStation.Info": 2,
     "SYNO.FileStation.List": 2,
     "SYNO.FileStation.CreateFolder": 2,
@@ -28,6 +30,14 @@ DOC_VERSIONS = {
     "SYNO.FileStation.Delete": 2,
     "SYNO.FileStation.Download": 2,
     "SYNO.FileStation.Upload": 3,
+    "SYNO.FileStation.Search": 2,
+    "SYNO.FileStation.DirSize": 2,
+    "SYNO.FileStation.MD5": 2,
+    "SYNO.FileStation.Compress": 3,
+    "SYNO.FileStation.Extract": 2,
+    "SYNO.FileStation.BackgroundTask": 3,
+    "SYNO.FileStation.Thumb": 2,
+    "SYNO.FileStation.Sharing": 3,
 }
 
 
@@ -173,7 +183,8 @@ class SynologyClient:
     ) -> dict[str, Any]:
         """Multipart upload (RFC 1867). requests puts `data` fields first, the file part last.
 
-        overwrite: "overwrite" | "skip" | None (None = omit; server errors 1805 on conflict).
+        overwrite: "overwrite" | "skip" | None (None = omit; a conflict is rejected:
+        1805 per the guide, 414 observed on DSM 7).
         """
         api = "SYNO.FileStation.Upload"
         ver = self.version(api)
@@ -191,22 +202,26 @@ class SynologyClient:
         resp.raise_for_status()
         return self._unwrap(api, "upload", resp.json())
 
+    def fetch_binary(self, api: str, method: str, **params: Any) -> tuple[bytes, str]:
+        """GET an endpoint that returns raw bytes (Download, Thumb).
+
+        Errors arrive either as a JSON envelope (Download) or as an HTTP status (Thumb).
+        """
+        query = {"api": api, "version": self.version(api), "method": method, "_sid": self.sid}
+        query.update({k: encode(v) for k, v in params.items() if v is not None})
+        resp = self.session.get(self._url(api), params=query, timeout=self.timeout)
+        if resp.status_code >= 400:
+            raise SynologyError(api, method, resp.status_code, http_status=True)
+        content_type = resp.headers.get("Content-Type", "")
+        if content_type.startswith("application/json"):
+            self._unwrap(api, method, resp.json())
+        return resp.content, content_type
+
     def download(self, path: str) -> bytes:
-        api = "SYNO.FileStation.Download"
-        params = {
-            "api": api,
-            "version": self.version(api),
-            "method": "download",
-            "path": encode([path]),
-            "mode": "download",
-            "_sid": self.sid,
-        }
-        resp = self.session.get(self._url(api), params=params, timeout=self.timeout, stream=True)
-        resp.raise_for_status()
-        # Errors come back as a JSON envelope instead of file bytes.
-        if resp.headers.get("Content-Type", "").startswith("application/json"):
-            self._unwrap(api, "download", resp.json())
-        return resp.content
+        data, _ = self.fetch_binary(
+            "SYNO.FileStation.Download", "download", path=[path], mode="download"
+        )
+        return data
 
     # -- non-blocking tasks ----------------------------------------------------
     def wait_task(
@@ -214,15 +229,20 @@ class SynologyClient:
         api: str,
         taskid: str,
         *,
+        method: str = "status",
         interval: float = 0.5,
         timeout: float = 60,
         on_progress: Any = None,
+        **params: Any,
     ) -> dict[str, Any]:
-        """Poll <api>.status until finished (CopyMove, Delete, ...)."""
+        """Poll <api>.<method> until finished.
+
+        Most async APIs poll `status`; Search polls `list` (pass method="list", limit=0).
+        """
         deadline = time.monotonic() + timeout
         while True:
             try:
-                status = self.call(api, "status", taskid=quoted(taskid))
+                status = self.call(api, method, taskid=quoted(taskid), **params)
             except SynologyError as e:
                 if e.code == 599:  # task already completed and reaped
                     return {"finished": True, "note": "task no longer listed"}

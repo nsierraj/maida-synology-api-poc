@@ -73,6 +73,23 @@ API_SPECIFIC = {
         1804: "Failed to upload oversized file to FAT file system",
         1805: "Can't overwrite or skip the existing file, no overwrite parameter given",
     },
+    "SYNO.FileStation.Compress": {
+        1300: "Failed to compress files/folders",
+        1301: "Cannot create the archive because the given archive name is too long",
+    },
+    "SYNO.FileStation.Extract": {
+        1400: "Failed to extract files",
+        1401: "Cannot open the file as archive",
+        1402: "Failed to read archive data",
+        1403: "Wrong password",
+        1404: "Failed to get the file and dir list in an archive",
+        1405: "Failed to find the item ID in an archive file",
+    },
+    "SYNO.FileStation.Sharing": {
+        2000: "Sharing link does not exist",
+        2001: "Cannot generate sharing link because too many sharing links exist",
+        2002: "Failed to access sharing links",
+    },
 }
 
 
@@ -89,12 +106,22 @@ def describe(api: str, code: int) -> str:
 class SynologyError(Exception):
     """A WebAPI call returned success=false."""
 
-    def __init__(self, api: str, method: str, code: int, errors: list | None = None):
+    def __init__(
+        self,
+        api: str,
+        method: str,
+        code: int,
+        errors: list | None = None,
+        *,
+        http_status: bool = False,
+    ):
         self.api = api
         self.method = method
         self.code = code
         self.errors = errors or []
-        self.message = describe(api, code)
+        self.http_status = http_status
+        # Binary endpoints (Thumb, Download with mode=open) report errors as HTTP statuses.
+        self.message = f"HTTP {code}" if http_status else describe(api, code)
         detail = ""
         if self.errors:
             parts = []
