@@ -1,5 +1,7 @@
 # Synology File Station MCP server
 
+> New to MCP? Read [mcp-explained.md](mcp-explained.md) first: it walks through how this server works, message by message.
+
 An MCP server (stdio) that gives an AI client such as Claude Code or Claude Desktop safe access to a Synology NAS through the File Station API. It wraps the use cases in [use-cases.md](use-cases.md).
 
 - **Code:** [`src/synology_mcp/server.py`](../src/synology_mcp/server.py)

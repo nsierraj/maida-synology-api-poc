@@ -5,6 +5,7 @@ library, runnable examples, and an MCP server.
 
 | Doc | Contents |
 | --- | --- |
+| [docs/mcp-explained.md](docs/mcp-explained.md) | **New to MCP? Start here.** What an MCP server is, step by step with real captured traffic, for REST/web developers |
 | [docs/use-cases.md](docs/use-cases.md) | The 20 use cases verified on a real NAS: API calls, encoding, DSM 7 quirks, implementation, MCP tool |
 | [docs/mcp-server.md](docs/mcp-server.md) | The MCP server: setup, tools, safety model, troubleshooting |
 | [docs/synology/file-station-api.md](docs/synology/file-station-api.md) | Condensed API reference plus errata against the official guide |
