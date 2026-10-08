@@ -258,7 +258,7 @@ Prompts are ready-made tasks that tell the model which tools to combine. They on
 | `SYNO_CA_CERT points to … which doesn't exist` (container) | Use `SYNO_CERT_HOSTNAME` or `SYNO_CERT_SHA256` instead; the image has no certificate files. |
 | `curl: (77) error setting certificate verify locations` | The `--cacert` file doesn't exist. With a public-CA certificate, drop `--cacert`. |
 | Certificate or hostname error when connecting to `https://<ip>:8443` | The certificate doesn't list the IP. Use a name from its Subject Alternative Name (step 4). |
-| Every tool call fails with `Cannot reach the NAS` or a timeout, but `/healthz` works | The container reaches DSM from Docker's network (usually `172.17.0.0/16`), not your LAN. Allow it to port 5001 in the DSM firewall, and check Control Panel → Security → Protection: failed logins with a wrong `SYNO_PASS` get that address auto-blocked. |
+| Every tool call fails with `Cannot reach the NAS` or a timeout, but `/healthz` works | The container reaches DSM from a Docker network, not your LAN: Compose gives each project its own subnet inside `172.16.0.0/12` (e.g. `172.19.0.0/16`). Allow it to port 5001 in the DSM firewall, and check Control Panel → Security → Protection: failed logins with a wrong `SYNO_PASS` get that address auto-blocked. |
 | `502` from the reverse proxy | The destination must be `127.0.0.1`, not `localhost`: the container only listens on IPv4 loopback. |
 | Long tool calls fail over HTTPS but work on `127.0.0.1:8765` | The reverse proxy timed out. Raise its read timeout (step 4 above). |
 
