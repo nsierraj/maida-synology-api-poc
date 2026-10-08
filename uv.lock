@@ -947,6 +947,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "cryptography" },
     { name = "pytest" },
 ]
 
@@ -958,7 +959,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
+dev = [
+    { name = "cryptography", specifier = ">=44" },
+    { name = "pytest", specifier = ">=9.1.1" },
+]
 
 [[package]]
 name = "truststore"

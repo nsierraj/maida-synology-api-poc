@@ -8,13 +8,19 @@ Safety model:
 
 Credentials come from the same .env as the PoC and never appear in tool output.
 Nothing may print to stdout: with the stdio transport, stdout is the protocol channel.
+
+Transports: stdio (default) or, with SYNO_MCP_TRANSPORT=http, streamable HTTP for running in a
+container. Over HTTP every request needs `Authorization: Bearer $SYNO_MCP_TOKEN`.
 """
 
 from __future__ import annotations
 
+import copy
 import functools
+import hmac
 import os
 import posixpath
+import sys
 import threading
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -24,9 +30,14 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import uvicorn
 from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, PlainTextResponse, Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from synology_poc import FileStation, PathPolicy, PolicyError, Settings, SynologyClient, SynologyError
 
@@ -91,12 +102,18 @@ class NasSession:
 
 def login_factory(settings: Settings) -> Callable[[], SynologyClient]:
     def make() -> SynologyClient:
-        client = settings.client()
+        # Setup mistakes would otherwise reach the client only as "Error executing tool".
+        try:
+            client = settings.client()
+        except SystemExit as e:  # Settings.client() exits on a missing CA file
+            raise ToolError(f"NAS client settings: {e.code}")
+        except ValueError as e:  # e.g. no TLS setting at all
+            raise ToolError(f"NAS client settings: {e}")
         try:
             client.discover()
             client.login(settings.user, settings.password)
         except requests.exceptions.SSLError as e:
-            raise ToolError(f"TLS check against the NAS failed ({e}). Check SYNO_CERT_SHA256 / SYNO_CA_CERT.")
+            raise ToolError(f"TLS check against the NAS failed ({e}). Check SYNO_CERT_SHA256 / SYNO_CERT_HOSTNAME / SYNO_CA_CERT.")
         except requests.exceptions.ConnectionError as e:
             raise ToolError(f"Cannot reach the NAS at {settings.host}:{settings.port}: {e}")
         except SynologyError as e:
@@ -487,8 +504,82 @@ def build_server(config: ServerConfig, session: NasSession | None = None) -> MCP
     return server
 
 
+# -- HTTP transport (e.g. a container in Synology Container Manager) ---------------
+MIN_TOKEN_LENGTH = 32
+HEALTH_PATH = "/healthz"
+
+
+@dataclass(frozen=True)
+class HttpConfig:
+    token: str = field(repr=False)
+    host: str = "127.0.0.1"
+    port: int = 8000
+
+    @classmethod
+    def from_env(cls) -> HttpConfig:
+        token = os.getenv("SYNO_MCP_TOKEN", "").strip()
+        if len(token) < MIN_TOKEN_LENGTH:
+            sys.exit(
+                f"SYNO_MCP_TRANSPORT=http needs SYNO_MCP_TOKEN with at least {MIN_TOKEN_LENGTH} "
+                "characters (e.g. `openssl rand -hex 32`)."
+            )
+        return cls(
+            token=token,
+            host=os.getenv("SYNO_MCP_HOST") or "127.0.0.1",
+            port=int(os.getenv("SYNO_MCP_PORT") or "8000"),
+        )
+
+
+class BearerTokenGuard:
+    """ASGI middleware: every HTTP request except the health check needs the shared token."""
+
+    def __init__(self, app: ASGIApp, token: str) -> None:
+        self.app = app
+        self.expected = f"Bearer {token}".encode()
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] != HEALTH_PATH:
+            given = dict(scope["headers"]).get(b"authorization", b"")
+            if not hmac.compare_digest(given, self.expected):
+                deny = JSONResponse({"error": "unauthorized"}, 401, headers={"WWW-Authenticate": "Bearer"})
+                await deny(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+def http_app(server: MCPServer, config: HttpConfig) -> Starlette:
+    """The MCP endpoint at /mcp behind the token check, plus an open GET /healthz."""
+
+    @server.custom_route(HEALTH_PATH, methods=["GET"], include_in_schema=False)
+    async def health(request: Request) -> Response:
+        return PlainTextResponse("ok")
+
+    # Plain JSON responses instead of SSE streams: reverse proxies (DSM's nginx) buffer SSE.
+    app = server.streamable_http_app(host=config.host, json_response=True)
+    app.add_middleware(BearerTokenGuard, token=config.token)
+    return app
+
+
+def http_server(app: ASGIApp, config: HttpConfig) -> uvicorn.Server:
+    log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    log_config["handlers"]["access"]["stream"] = "ext://sys.stderr"  # keep stdout clean
+    return uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port, log_config=log_config))
+
+
+def transport_from_env() -> str:
+    transport = (os.getenv("SYNO_MCP_TRANSPORT") or "stdio").strip().lower()
+    if transport not in ("stdio", "http"):
+        sys.exit(f"SYNO_MCP_TRANSPORT must be 'stdio' or 'http', not {transport!r}")
+    return transport
+
+
 def main() -> None:
-    build_server(ServerConfig.from_env()).run("stdio")
+    config = ServerConfig.from_env()  # also loads .env
+    if transport_from_env() == "stdio":
+        build_server(config).run("stdio")
+        return
+    http = HttpConfig.from_env()
+    http_server(http_app(build_server(config), http), http).run()
 
 
 if __name__ == "__main__":

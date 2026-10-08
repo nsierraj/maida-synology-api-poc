@@ -30,7 +30,7 @@ library, runnable examples, and an MCP server.
 
 ## 2. Pin the NAS certificate
 
-The client refuses to run without TLS pinning. Pick one option:
+The client refuses to run without TLS pinning. Pick one option. If DSM uses a certificate from a public CA (e.g. a `synology.me` DDNS certificate), option C is best: it keeps working when DSM renews the certificate.
 
 **Option A: fingerprint (simplest when connecting by IP).**
 
@@ -45,7 +45,12 @@ Put the hex value in `SYNO_CERT_SHA256=` (colons are fine). Compare it with the 
 Control Panel → Security → Certificate → select the cert → **Export**. Copy the CA/chain file from the zip (e.g. `syno-ca-cert.pem`) to `certs/synology-ca.pem` and set `SYNO_CA_CERT`.
 
 - The export also contains `privkey.pem`. Delete it; never keep the private key in this repo. `certs/` is gitignored.
-- DSM's default certificate usually doesn't list the LAN IP. If you get a hostname mismatch error, connect via a hostname the cert covers, or use option A.
+- DSM's default certificate usually doesn't list the LAN IP. If you get a hostname mismatch error, connect via a hostname the cert covers, or use option A or C.
+
+**Option C: certificate name (public CA, survives renewals).**
+Keep `SYNO_HOST` as the LAN IP and set `SYNO_CERT_HOSTNAME` to a name in the certificate's Subject Alternative Name (Control Panel → Security → Certificate), e.g. `SYNO_CERT_HOSTNAME=fakenas.synology.me`. The client connects to the IP but checks the certificate against that name, using the public CAs Python trusts, so no DNS changes are needed. With `SYNO_CA_CERT` also set, it trusts that CA file instead. A fingerprint wins if `SYNO_CERT_SHA256` is set too, so leave it empty.
+
+Option A breaks whenever DSM renews the certificate (Let's Encrypt certificates, including `synology.me` ones, renew every few months): re-run the `openssl` command and update `.env`.
 
 ## 3. Configure and run
 
@@ -75,6 +80,8 @@ claude mcp add synology -- uv run --directory "$PWD" synology-mcp
 ```
 
 It's read-only by default. Write tools need `SYNO_MCP_ALLOW_WRITES=true` and stay inside `SYNO_MCP_ROOTS`, and share links need `SYNO_MCP_ALLOW_SHARING=true`. See [docs/mcp-server.md](docs/mcp-server.md).
+
+It can also run as a container in Synology Container Manager, over HTTP with a bearer token: see [Running in Container Manager](docs/mcp-server.md#running-in-container-manager).
 
 ## Tests
 

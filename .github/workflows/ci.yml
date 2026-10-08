@@ -28,3 +28,23 @@ jobs:
       - run: uv sync --locked --python ${{ matrix.python-version }}
       # Runs against the fake NAS: no .env, network or secrets needed.
       - run: uv run pytest
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Build only, never pushed: keeps the Dockerfile working without registry credentials.
+      - run: docker build --tag synology-mcp:ci .
+      # Dummy NAS settings: the server only contacts the NAS on the first tool call.
+      - name: Run the image and check /healthz and the token check
+        run: |
+          docker run -d --name mcp -p 127.0.0.1:8000:8000 \
+            -e SYNO_HOST=fakenas.local -e SYNO_USER=poc-user -e SYNO_PASS=x -e SYNO_CERT_SHA256=00 \
+            -e SYNO_MCP_TOKEN=0123456789abcdef0123456789abcdef synology-mcp:ci
+          for i in $(seq 1 20); do curl -fs http://127.0.0.1:8000/healthz && break; sleep 1; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp)" = 401
+          for i in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' mcp)" = healthy ] && break; sleep 2; done
+          test "$(docker inspect -f '{{.State.Health.Status}}' mcp)" = healthy
+      - if: always()
+        run: docker logs mcp
