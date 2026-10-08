@@ -76,6 +76,8 @@ claude mcp add synology -- uv run --directory "$PWD" synology-mcp
 
 It's read-only by default. Write tools need `SYNO_MCP_ALLOW_WRITES=true` and stay inside `SYNO_MCP_ROOTS`, and share links need `SYNO_MCP_ALLOW_SHARING=true`. See [docs/mcp-server.md](docs/mcp-server.md).
 
+It can also run as a container in Synology Container Manager, over HTTP with a bearer token: see [Running in Container Manager](docs/mcp-server.md#running-in-container-manager).
+
 ## Tests
 
 ```bash

@@ -1,0 +1,22 @@
+# Container Manager project for the MCP server. Copy the repo to e.g. /volume1/docker/synology-mcp,
+# put a .env next to this file, then Container Manager → Project → Create → that folder.
+# See docs/mcp-server.md, "Running in Container Manager".
+services:
+  synology-mcp:
+    build: .
+    image: synology-mcp:local
+    container_name: synology-mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fixed here so a laptop .env can't switch the container back to stdio.
+      SYNO_MCP_TRANSPORT: http
+      SYNO_MCP_HOST: 0.0.0.0
+      SYNO_MCP_PORT: "8000"
+    ports:
+      # Plain HTTP, reachable only from the NAS itself. DSM's reverse proxy adds TLS in front.
+      - "127.0.0.1:8765:8000"
+    # Optional folder for upload_file sources and download_file saves. Also set
+    # SYNO_MCP_LOCAL_DIR=/data in .env; the folder must be writable by uid 10001.
+    # volumes:
+    #   - ./exchange:/data

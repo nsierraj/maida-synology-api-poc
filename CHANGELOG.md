@@ -5,6 +5,11 @@ The project follows [Semantic Versioning](https://semver.org/); while it is 0.x,
 
 ## [Unreleased]
 
+### Added
+- HTTP transport for the MCP server (`SYNO_MCP_TRANSPORT=http`): streamable HTTP via uvicorn, a required bearer token (`SYNO_MCP_TOKEN`, at least 32 characters) on every request, and an open `GET /healthz`. stdio stays the default.
+- `Dockerfile`, `.dockerignore` and `docker-compose.yml` to run the server in Synology Container Manager behind DSM's reverse proxy, documented in `docs/mcp-server.md`.
+- CI job that builds the Docker image (no push).
+
 ## [0.1.0] - 2026-10-07
 
 First release.

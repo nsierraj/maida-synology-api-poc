@@ -7,7 +7,8 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 - `uv sync`: install (Python ≥ 3.11, deps in `pyproject.toml` / `uv.lock`)
 - `uv run pytest`: the whole suite, against the fake NAS. Must pass before any commit. CI runs it on Python 3.11–3.13.
 - `uv run examples/0N_*.py`: real-NAS runs. They need `.env` and are run by the user. Only 03–05 write, and only inside `SYNO_SANDBOX`.
-- `uv run synology-mcp`: the MCP server (stdio). It reads the same `.env`; `SYNO_MCP_*` flags enable writes and sharing.
+- `uv run synology-mcp`: the MCP server (stdio). It reads the same `.env`; `SYNO_MCP_*` flags enable writes and sharing. `SYNO_MCP_TRANSPORT=http` + `SYNO_MCP_TOKEN` serves it over HTTP instead.
+- `Dockerfile` / `docker-compose.yml`: the HTTP server as a Container Manager project on the NAS (x86_64). No local Docker here; CI's `docker build` job checks the image builds.
 - `uv run python scripts/capture_mcp_wire.py`: regenerates `docs/mcp-wire-sample.md`.
 
 ## Code
@@ -19,7 +20,7 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
   - `errors.py`: error code tables
   - `config.py`: `.env` loading
   - `sandbox.py`: helpers for the examples
-- `src/synology_mcp/server.py`: the MCP server: read tools always on, write and share tools only when enabled, plus 3 prompts.
+- `src/synology_mcp/server.py`: the MCP server: read tools always on, write and share tools only when enabled, plus 3 prompts. Over HTTP, `BearerTokenGuard` checks the token on every path except `/healthz`.
 - `examples/01–05`: discovery/login, browsing, file lifecycle, async jobs, sharing + thumbnails.
 - `tests/`: `fake_nas.py` reproduces the observed DSM 7 quirks. When you learn a new one, add it to the fake and add a test.
 - `scripts/capture_mcp_wire.py`: records real MCP traffic (server + fake NAS) for the docs.
@@ -33,7 +34,7 @@ Python library, examples and MCP server for the Synology DSM 7 File Station Web 
 - **Order for new NAS operations:** `FileStation` method + fake + test → real-NAS example → MCP tool → docs (`use-cases.md`, `mcp-server.md`).
 - **Nothing in `synology_mcp` or the library may print to stdout**; with stdio, stdout is the protocol channel.
 - **`mcp` is 2.x:** `FastMCP` is now `mcp.server.mcpserver.MCPServer`, and annotations are `mcp_types.ToolAnnotations` (snake_case). Don't follow 1.x examples.
-- **Never commit `.env`, `certs/` or `out/`** (all gitignored). The repo is public: never commit the proprietary Synology PDF or anything NAS-specific.
+- **Never commit `.env`, `certs/` or `out/`** (all gitignored), and keep them in `.dockerignore` so they never reach an image layer. The repo is public: never commit the proprietary Synology PDF or anything NAS-specific.
 - **Don't put the real NAS's IP, hostname, SIDs or passwords in docs or samples**; use the fake NAS (`fakenas`).
 
 ## Repo workflow

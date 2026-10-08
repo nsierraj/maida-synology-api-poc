@@ -28,3 +28,11 @@ jobs:
       - run: uv sync --locked --python ${{ matrix.python-version }}
       # Runs against the fake NAS: no .env, network or secrets needed.
       - run: uv run pytest
+
+  docker:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Build only, never pushed: keeps the Dockerfile working without registry credentials.
+      - run: docker build --tag synology-mcp:ci .
