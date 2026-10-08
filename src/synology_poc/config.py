@@ -23,6 +23,7 @@ class Settings:
     ca_cert: str | None
     cert_sha256: str | None
     denied_path: str
+    cert_hostname: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -40,20 +41,22 @@ class Settings:
             ca_cert=os.getenv("SYNO_CA_CERT") or None,
             cert_sha256=os.getenv("SYNO_CERT_SHA256") or None,
             denied_path=os.getenv("SYNO_DENIED_PATH", "/homes"),
+            cert_hostname=os.getenv("SYNO_CERT_HOSTNAME") or None,
         )
 
     def client(self) -> SynologyClient:
         if not self.cert_sha256 and self.ca_cert and not os.path.isfile(self.ca_cert):
             sys.exit(
                 f"SYNO_CA_CERT points to {self.ca_cert!r}, which doesn't exist. "
-                "Export the cert from DSM or set SYNO_CERT_SHA256 instead (see README)."
+                "Export the cert from DSM or set SYNO_CERT_SHA256 / SYNO_CERT_HOSTNAME instead (see README)."
             )
-        # A fingerprint wins over a CA file when both are set.
+        # A fingerprint wins over the other settings when several are set.
         return SynologyClient(
             self.host,
             self.port,
             ca_cert=None if self.cert_sha256 else self.ca_cert,
             cert_sha256=self.cert_sha256,
+            cert_hostname=None if self.cert_sha256 else self.cert_hostname,
         )
 
 
@@ -66,7 +69,8 @@ def connect(settings: Settings) -> SynologyClient:
     except requests.exceptions.SSLError as e:
         sys.exit(
             f"TLS check failed: {e}\n"
-            "If the cert doesn't cover this host/IP, use SYNO_CERT_SHA256 instead (see README)."
+            "If the cert doesn't cover this host/IP, set SYNO_CERT_HOSTNAME to a name it covers, "
+            "or use SYNO_CERT_SHA256 (see README)."
         )
     except requests.exceptions.ConnectionError as e:
         sys.exit(f"Cannot reach https://{settings.host}:{settings.port}: {e}")

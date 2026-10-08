@@ -61,6 +61,22 @@ class FingerprintAdapter(HTTPAdapter):
         super().init_poolmanager(*args, **kwargs)
 
 
+class HostnameAdapter(HTTPAdapter):
+    """Verify the certificate for a fixed name (SNI + hostname check) while connecting to
+    another address, e.g. the LAN IP with a public-CA certificate for a synology.me DDNS name.
+    Unlike a fingerprint pin, this keeps working when DSM renews the certificate.
+    """
+
+    def __init__(self, hostname: str, **kwargs: Any):
+        self._hostname = hostname.strip()
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+        kwargs["server_hostname"] = self._hostname
+        kwargs["assert_hostname"] = self._hostname
+        super().init_poolmanager(*args, **kwargs)
+
+
 def encode(value: Any) -> str:
     """Encode a parameter the way the WebAPI expects (guide section 2)."""
     if isinstance(value, bool):
@@ -83,11 +99,12 @@ class SynologyClient:
         *,
         ca_cert: str | None = None,
         cert_sha256: str | None = None,
+        cert_hostname: str | None = None,
         timeout: float = 30,
     ):
-        if not ca_cert and not cert_sha256:
+        if not ca_cert and not cert_sha256 and not cert_hostname:
             raise ValueError(
-                "TLS pinning required: set SYNO_CA_CERT or SYNO_CERT_SHA256 (see README)."
+                "TLS pinning required: set SYNO_CERT_SHA256, SYNO_CERT_HOSTNAME or SYNO_CA_CERT (see README)."
             )
         self.base_url = f"https://{host}:{port}/webapi"
         self.timeout = timeout
@@ -95,6 +112,10 @@ class SynologyClient:
         if cert_sha256:
             self.session.verify = False
             self.session.mount("https://", FingerprintAdapter(cert_sha256))
+        elif cert_hostname:
+            # Public CAs (certifi), or the CA file when one is given.
+            self.session.verify = ca_cert or True
+            self.session.mount("https://", HostnameAdapter(cert_hostname))
         else:
             self.session.verify = ca_cert
         self.apis: dict[str, dict[str, Any]] = {}

@@ -37,7 +37,7 @@ These apply to every use case. Each was learned on the real NAS, and the library
 
 1. **Discover first.** `SYNO.API.Info` (`query.cgi`, v1, `query=all`) is the only fixed endpoint. Resolve every other API's CGI path and version from it. On DSM 7 every File Station API lives on `entry.cgi`.
 2. **Log in with Auth v7.** The guide documents v3, but on DSM 7 a non-admin session created with Auth **v3 or v6** gets **105** from `Compress`. Session name, cookie vs `_sid`, SynoToken, and Compress version made no difference. `client.DOC_VERSIONS` asks for v7, clamped to what the NAS offers.
-3. **Pin TLS.** The client refuses to run without `SYNO_CERT_SHA256` (fingerprint pin, works by IP) or `SYNO_CA_CERT` (CA file, hostname must match).
+3. **Pin TLS.** The client refuses to run without `SYNO_CERT_SHA256` (fingerprint pin, works by IP), `SYNO_CERT_HOSTNAME` (connect by IP, verify the certificate against that name with public CAs; survives renewals) or `SYNO_CA_CERT` (CA file, hostname must match unless `SYNO_CERT_HOSTNAME` is set).
 4. **Parameter encoding.**
    - Lists are JSON arrays: `path=["/a","/b"]`.
    - Booleans are `true`/`false`.

@@ -102,8 +102,9 @@ Start from [`.env.container.example`](../.env.container.example). Compared with 
 | Setting | In the container |
 |---|---|
 | `SYNO_HOST` | The NAS's LAN IP. Inside the container, `localhost` is the container itself. |
-| `SYNO_CERT_SHA256` | Required: the fingerprint works with an IP, and the image has no certificate files. Get it with the `openssl` command in the [README](../README.md) and copy the part after `=`. After DSM renews its certificate, update it and recreate the container. |
-| `SYNO_CA_CERT` | Empty. |
+| `SYNO_CERT_HOSTNAME` | If DSM's certificate is from a public CA (e.g. a `synology.me` DDNS certificate): a name from its Subject Alternative Name, such as `fakenas.synology.me`. The container connects to `SYNO_HOST` and checks the certificate against this name, so renewals don't break it and no DNS setup is needed. |
+| `SYNO_CERT_SHA256` | Otherwise (self-signed certificate): the fingerprint, from the `openssl` command in the [README](../README.md) (the part after `=`). Update it and recreate the container whenever DSM renews the certificate. Leave it empty when you use `SYNO_CERT_HOSTNAME`: it would take precedence. |
+| `SYNO_CA_CERT` | Empty: the image has no certificate files. |
 | `SYNO_MCP_LOCAL_DIR` | Empty, unless you mount a volume (see `docker-compose.yml`). |
 | `SYNO_MCP_TOKEN` | The output of `openssl rand -hex 32`. Clients need the same value (step 5). |
 | `SYNO_MCP_TRANSPORT`, `SYNO_MCP_HOST`, `SYNO_MCP_PORT` | Leave them out: `docker-compose.yml` sets them and overrides `.env`. |
@@ -118,29 +119,39 @@ Start from [`.env.container.example`](../.env.container.example). Compared with 
 
 ### 3. Create the project
 
-1. Container Manager → **Project** → **Create**. Name it `synology-mcp`, set the path to the folder above, and use the existing `docker-compose.yml`.
+1. Container Manager → **Project** → **Create**. Name it `synology-mcp`, set the path to the folder above, and use the existing `docker-compose.yml`. On the **Web portal settings** page, leave **Set up web portal via Web Station** unchecked: step 4 uses DSM's reverse proxy instead.
 2. Container Manager builds the image and starts the container. Over SSH, `sudo docker compose up -d --build` in the folder does the same.
 3. Check it over SSH: `curl http://127.0.0.1:8765/healthz` prints `ok`. The container's log is under Container Manager → **Container** → `synology-mcp` → **Log**.
 
 ### 4. Add HTTPS with the reverse proxy
 
+First pick the hostname clients will use. It must be a name in the NAS certificate's **Subject Alternative Name** (Control Panel → **Security** → **Certificate**), or clients reject the connection; an IP address only works if the certificate lists it. A DDNS name such as `fakenas.synology.me` points to your public IP, so make it resolve to the NAS's LAN IP on the client computers, without forwarding any port on the router:
+
+- On one computer, add a line to `/etc/hosts` (e.g. `192.168.1.50  fakenas.synology.me`). While it's there, that computer always uses the LAN address for the name, including away from home.
+- For the whole LAN, use a local DNS override on the router. Not every router has one (eero, for example, doesn't); DSM's **DNS Server** package can host the record instead, with the router's DNS pointed at the NAS.
+
+Then:
+
 1. Control Panel → **Login Portal** → **Advanced** → **Reverse Proxy** → **Create**:
 
    | | Protocol | Hostname | Port |
    |---|---|---|---|
-   | Source | HTTPS | your NAS hostname, e.g. `fakenas.local` | 8443 |
+   | Source | HTTPS | the hostname above, e.g. `fakenas.synology.me` | 8443 |
    | Destination | HTTP | `127.0.0.1` | 8765 |
 
 2. In the rule's **Advanced Settings**, raise the proxy read timeout (e.g. 600 s). `compress`, `extract` and `folder_size` wait for the NAS job inside one request, and the default is 60 s.
 3. Control Panel → **Security** → **Certificate** → **Settings**: pick the certificate for the new entry.
 4. If the DSM firewall is on, allow port 8443 from your LAN only.
+5. Check it from your computer: `curl https://fakenas.synology.me:8443/healthz` prints `ok`, and `curl -s -o /dev/null -w '%{http_code}' -X POST https://fakenas.synology.me:8443/mcp` prints `401`. With a public-CA certificate, curl needs no `--cacert`; for your own CA, add `--cacert <ca-file>`.
+
+The reverse proxy answers on IPv4 only. If the hostname also has an IPv6 address (DDNS names often do), clients fall back to IPv4 after the IPv6 connection is refused.
 
 ### 5. Connect a client
 
 Claude Code:
 
 ```bash
-claude mcp add --transport http synology https://fakenas.local:8443/mcp \
+claude mcp add --transport http synology https://fakenas.synology.me:8443/mcp \
   --header "Authorization: Bearer <SYNO_MCP_TOKEN>"
 ```
 
@@ -151,7 +162,7 @@ Claude Desktop, through the `mcp-remote` bridge (needs Node.js):
   "mcpServers": {
     "synology": {
       "command": "npx",
-      "args": ["mcp-remote", "https://fakenas.local:8443/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      "args": ["mcp-remote", "https://fakenas.synology.me:8443/mcp", "--header", "Authorization:${AUTH_HEADER}"],
       "env": { "AUTH_HEADER": "Bearer <SYNO_MCP_TOKEN>" }
     }
   }
@@ -235,7 +246,7 @@ Prompts are ready-made tasks that tell the model which tools to combine. They on
 
 | Symptom | Cause / fix |
 | --- | --- |
-| `TLS check against the NAS failed` | The certificate fingerprint changed (DSM renewed its certificate) or a CA file doesn't match the host. Re-run the `openssl` command in the README. |
+| `TLS check against the NAS failed` | The certificate fingerprint changed (DSM renewed its certificate) or a CA file doesn't match the host. Re-run the `openssl` command in the README, or, if the certificate is from a public CA, switch to `SYNO_CERT_HOSTNAME` so renewals stop breaking it. |
 | `NAS login failed: … 400` | Wrong user or password in `.env`. Repeated failures make DSM Auto Block ban the IP (Control Panel → Security → Protection). |
 | `105` on compress | The session wasn't created with Auth v7. Check that `client.DOC_VERSIONS["SYNO.API.Auth"]` is 7 and the NAS advertises v7 (`uv run examples/01_discover_and_login.py`). |
 | Share tools missing | `SYNO_MCP_ALLOW_SHARING` isn't `true`. If creation fails, the DSM user may lack the sharing permission (File Station → Settings). |
@@ -244,14 +255,16 @@ Prompts are ready-made tasks that tell the model which tools to combine. They on
 | Container keeps restarting, log mentions `SYNO_MCP_TOKEN` | The token is missing or shorter than 32 characters. |
 | `401` / client says unauthorized | The client's token doesn't match `SYNO_MCP_TOKEN`. After changing `.env`, recreate the container (`sudo docker compose up -d`); a plain restart keeps the old settings. |
 | `Cannot reach the NAS at localhost` (container) | Set `SYNO_HOST` to the NAS's LAN IP. |
-| `SYNO_CA_CERT points to … which doesn't exist` (container) | Use `SYNO_CERT_SHA256` instead; the image has no certificate files. |
+| `SYNO_CA_CERT points to … which doesn't exist` (container) | Use `SYNO_CERT_HOSTNAME` or `SYNO_CERT_SHA256` instead; the image has no certificate files. |
+| `curl: (77) error setting certificate verify locations` | The `--cacert` file doesn't exist. With a public-CA certificate, drop `--cacert`. |
+| Certificate or hostname error when connecting to `https://<ip>:8443` | The certificate doesn't list the IP. Use a name from its Subject Alternative Name (step 4). |
 | Every tool call fails with `Cannot reach the NAS` or a timeout, but `/healthz` works | The container reaches DSM from Docker's network (usually `172.17.0.0/16`), not your LAN. Allow it to port 5001 in the DSM firewall, and check Control Panel → Security → Protection: failed logins with a wrong `SYNO_PASS` get that address auto-blocked. |
 | `502` from the reverse proxy | The destination must be `127.0.0.1`, not `localhost`: the container only listens on IPv4 loopback. |
 | Long tool calls fail over HTTPS but work on `127.0.0.1:8765` | The reverse proxy timed out. Raise its read timeout (step 4 above). |
 
 ## Development
 
-- **Tests:** `uv run pytest`. They use [`tests/fake_nas.py`](../tests/fake_nas.py), an in-memory DSM 7 that reproduces the observed quirks. `tests/test_mcp_server.py` drives the server through the SDK's in-process `mcp.Client`; `tests/test_mcp_http.py` runs it under uvicorn and checks the token.
+- **Tests:** `uv run pytest`. They use [`tests/fake_nas.py`](../tests/fake_nas.py), an in-memory DSM 7 that reproduces the observed quirks. `tests/test_mcp_server.py` drives the server through the SDK's in-process `mcp.Client`; `tests/test_mcp_http.py` runs it under uvicorn and checks the token. `tests/test_tls.py` checks the TLS modes against a local HTTPS server with a generated certificate.
 - **Inspector:** `npx @modelcontextprotocol/inspector uv run synology-mcp` gives a UI for calling the tools by hand.
 
 ### Adding a tool

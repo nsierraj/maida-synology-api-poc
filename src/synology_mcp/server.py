@@ -107,7 +107,7 @@ def login_factory(settings: Settings) -> Callable[[], SynologyClient]:
             client.discover()
             client.login(settings.user, settings.password)
         except requests.exceptions.SSLError as e:
-            raise ToolError(f"TLS check against the NAS failed ({e}). Check SYNO_CERT_SHA256 / SYNO_CA_CERT.")
+            raise ToolError(f"TLS check against the NAS failed ({e}). Check SYNO_CERT_SHA256 / SYNO_CERT_HOSTNAME / SYNO_CA_CERT.")
         except requests.exceptions.ConnectionError as e:
             raise ToolError(f"Cannot reach the NAS at {settings.host}:{settings.port}: {e}")
         except SynologyError as e:

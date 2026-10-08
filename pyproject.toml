@@ -22,5 +22,6 @@ packages = ["src/synology_poc", "src/synology_mcp"]
 
 [dependency-groups]
 dev = [
+    "cryptography>=44",
     "pytest>=9.1.1",
 ]
