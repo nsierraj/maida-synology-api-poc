@@ -79,23 +79,50 @@ What changes compared with stdio:
 
 ### 1. Prepare the project folder
 
-1. Install **Container Manager** from Package Center.
-2. Copy the repo to a folder on the NAS, e.g. `/volume1/docker/synology-mcp`: download the ZIP from GitHub and extract it with File Station, or `git clone` over SSH.
-3. Create `.env` in that folder from [`.env.example`](../.env.example), with these differences from your local one:
-   - `SYNO_HOST`: the NAS's LAN IP. Inside the container, `localhost` is the container itself.
-   - `SYNO_CERT_SHA256` instead of `SYNO_CA_CERT`. The fingerprint works with an IP address, and there's no certificate file in the image. Get it with the `openssl` command in the [README](../README.md).
-   - `SYNO_MCP_TOKEN`: the output of `openssl rand -hex 32`.
-   - Keep `SYNO_USER`, `SYNO_PASS`, `SYNO_SANDBOX` and the `SYNO_MCP_*` flags as for stdio. `docker-compose.yml` sets the transport, host and port itself.
+1. Install **Container Manager** from Package Center. It creates a `docker` shared folder; if it doesn't, create one in Control Panel → **Shared Folder**.
+2. Keep the MCP's DSM user out of that share: Control Panel → **Shared Folder** → `docker` → **Edit** → **Permissions** → `SYNO_USER` (e.g. `poc-user`) → **No access**. The `.env` there holds the NAS password and the token, and the read tools can read whatever that user can. Do the copying below as an admin.
+3. Copy the repo to `/volume1/docker/synology-mcp`, so that `docker-compose.yml`, `Dockerfile` and `src/` are directly in that folder. Either:
+   - **Zip it on your computer and upload it.** `git archive` includes only committed files, so `.env`, `certs/` and `.venv/` stay out:
 
-   The `.dockerignore` keeps `.env` and `certs/` out of the image; Compose passes the settings to the container at start.
+     ```bash
+     git archive --format=zip -o synology-mcp.zip main
+     ```
 
-### 2. Create the project
+     In File Station, create `docker/synology-mcp`, **Upload** the zip, right-click it → **Extract** → **Extract here**, then delete the zip. A ZIP downloaded from GitHub works the same way, but its contents sit in a `maida-synology-api-poc-main` folder; move them up a level.
+   - **Or `git clone` over SSH.** This needs the **Git Server** package and SSH (Control Panel → **Terminal & SNMP**). Updating is then `git pull`:
+
+     ```bash
+     git clone https://github.com/nsierraj/maida-synology-api-poc.git /volume1/docker/synology-mcp
+     ```
+
+### 2. Create `.env`
+
+Start from [`.env.container.example`](../.env.container.example). Compared with your local `.env`:
+
+| Setting | In the container |
+|---|---|
+| `SYNO_HOST` | The NAS's LAN IP. Inside the container, `localhost` is the container itself. |
+| `SYNO_CERT_SHA256` | Required: the fingerprint works with an IP, and the image has no certificate files. Get it with the `openssl` command in the [README](../README.md) and copy the part after `=`. After DSM renews its certificate, update it and recreate the container. |
+| `SYNO_CA_CERT` | Empty. |
+| `SYNO_MCP_LOCAL_DIR` | Empty, unless you mount a volume (see `docker-compose.yml`). |
+| `SYNO_MCP_TOKEN` | The output of `openssl rand -hex 32`. Clients need the same value (step 5). |
+| `SYNO_MCP_TRANSPORT`, `SYNO_MCP_HOST`, `SYNO_MCP_PORT` | Leave them out: `docker-compose.yml` sets them and overrides `.env`. |
+
+`SYNO_USER`, `SYNO_PASS`, `SYNO_SANDBOX`, `SYNO_MCP_ROOTS` and the `SYNO_MCP_ALLOW_*` flags mean the same as for stdio. Start read-only and turn writes on once it works.
+
+- **Format:** one `NAME=value` per line, no spaces around `=`. Put values containing `$`, `#` or spaces in single quotes (`SYNO_PASS='pa$$ word'`); otherwise Compose treats `$…` as a variable and `#` as a comment.
+- **Getting it onto the NAS:** write it on your computer as `env.txt` (plain text), **Upload** it to `docker/synology-mcp` in File Station, then rename it to `.env`. File pickers hide files whose names start with a dot, which is why you upload it as `env.txt` first. With SSH, `vi /volume1/docker/synology-mcp/.env` works too.
+- **Changing it later:** a restart keeps the old values. Recreate the container (`sudo docker compose up -d`, or stop the project and build it again).
+
+`.dockerignore` keeps `.env` and `certs/` out of the image; Compose passes the settings to the container when it starts.
+
+### 3. Create the project
 
 1. Container Manager → **Project** → **Create**. Name it `synology-mcp`, set the path to the folder above, and use the existing `docker-compose.yml`.
 2. Container Manager builds the image and starts the container. Over SSH, `sudo docker compose up -d --build` in the folder does the same.
 3. Check it over SSH: `curl http://127.0.0.1:8765/healthz` prints `ok`. The container's log is under Container Manager → **Container** → `synology-mcp` → **Log**.
 
-### 3. Add HTTPS with the reverse proxy
+### 4. Add HTTPS with the reverse proxy
 
 1. Control Panel → **Login Portal** → **Advanced** → **Reverse Proxy** → **Create**:
 
@@ -108,7 +135,7 @@ What changes compared with stdio:
 3. Control Panel → **Security** → **Certificate** → **Settings**: pick the certificate for the new entry.
 4. If the DSM firewall is on, allow port 8443 from your LAN only.
 
-### 4. Connect a client
+### 5. Connect a client
 
 Claude Code:
 
@@ -218,8 +245,9 @@ Prompts are ready-made tasks that tell the model which tools to combine. They on
 | `401` / client says unauthorized | The client's token doesn't match `SYNO_MCP_TOKEN`. After changing `.env`, recreate the container (`sudo docker compose up -d`); a plain restart keeps the old settings. |
 | `Cannot reach the NAS at localhost` (container) | Set `SYNO_HOST` to the NAS's LAN IP. |
 | `SYNO_CA_CERT points to … which doesn't exist` (container) | Use `SYNO_CERT_SHA256` instead; the image has no certificate files. |
+| Every tool call fails with `Cannot reach the NAS` or a timeout, but `/healthz` works | The container reaches DSM from Docker's network (usually `172.17.0.0/16`), not your LAN. Allow it to port 5001 in the DSM firewall, and check Control Panel → Security → Protection: failed logins with a wrong `SYNO_PASS` get that address auto-blocked. |
 | `502` from the reverse proxy | The destination must be `127.0.0.1`, not `localhost`: the container only listens on IPv4 loopback. |
-| Long tool calls fail over HTTPS but work on `127.0.0.1:8765` | The reverse proxy timed out. Raise its read timeout (step 3 above). |
+| Long tool calls fail over HTTPS but work on `127.0.0.1:8765` | The reverse proxy timed out. Raise its read timeout (step 4 above). |
 
 ## Development
 
