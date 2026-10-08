@@ -5,7 +5,7 @@ import json
 import pytest
 from mcp import Client
 
-from synology_poc import PathPolicy, SynologyClient
+from synology_poc import PathPolicy, Settings, SynologyClient
 from synology_mcp.server import NasSession, ServerConfig, build_server
 
 from .fake_nas import PASSWORD
@@ -199,3 +199,16 @@ async def test_prompts(client, tmp_path):
     async with Client(make_server(client, tmp_path, writes=True, sharing=True)) as c:
         clean = (await c.get_prompt("clean_sandbox")).messages[0].content.text
         assert "delete_share_link" in clean and "with the delete tool" in clean
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("tls,expected", [
+    ({}, "TLS pinning required"),
+    ({"ca_cert": "/nonexistent/ca.pem"}, "doesn't exist"),
+])
+async def test_settings_errors_are_readable_tool_errors(tmp_path, tls, expected):
+    settings = Settings(host="fakenas.local", port=5001, user="poc-user", password=PASSWORD, sandbox="/poc-sandbox",
+                        ca_cert=tls.get("ca_cert"), cert_sha256=None, denied_path="/homes")
+    config = ServerConfig(settings=settings, policy=PathPolicy(("/poc-sandbox",)), local_dir=tmp_path)
+    result = await call(build_server(config), "nas_info")
+    assert "NAS client settings" in error_text(result) and expected in error_text(result)

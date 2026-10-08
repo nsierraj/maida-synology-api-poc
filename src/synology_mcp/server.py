@@ -102,7 +102,13 @@ class NasSession:
 
 def login_factory(settings: Settings) -> Callable[[], SynologyClient]:
     def make() -> SynologyClient:
-        client = settings.client()
+        # Setup mistakes would otherwise reach the client only as "Error executing tool".
+        try:
+            client = settings.client()
+        except SystemExit as e:  # Settings.client() exits on a missing CA file
+            raise ToolError(f"NAS client settings: {e.code}")
+        except ValueError as e:  # e.g. no TLS setting at all
+            raise ToolError(f"NAS client settings: {e}")
         try:
             client.discover()
             client.login(settings.user, settings.password)

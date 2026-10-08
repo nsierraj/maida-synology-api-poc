@@ -9,6 +9,7 @@ The project follows [Semantic Versioning](https://semver.org/); while it is 0.x,
 - HTTP transport for the MCP server (`SYNO_MCP_TRANSPORT=http`): streamable HTTP via uvicorn, a required bearer token (`SYNO_MCP_TOKEN`, at least 32 characters) on every request, and an open `GET /healthz`. stdio stays the default.
 - `Dockerfile`, `.dockerignore`, `docker-compose.yml` and `.env.container.example` to run the server in Synology Container Manager behind DSM's reverse proxy, documented in `docs/mcp-server.md`.
 - `SYNO_CERT_HOSTNAME`: connect to `SYNO_HOST` (e.g. the LAN IP) but verify DSM's certificate against this name with public CAs (or `SYNO_CA_CERT`). Unlike the fingerprint pin, it survives certificate renewals.
+- MCP server: client setup errors (no TLS setting, missing CA file) now come back as readable tool errors instead of the SDK's generic `Error executing tool`.
 - CI job that builds the Docker image (no push) and runs it to check `/healthz`, the token check and the health check; Dependabot for the image's base pins.
 
 ## [0.1.0] - 2026-10-07
