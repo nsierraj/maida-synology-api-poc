@@ -102,7 +102,7 @@ What changes compared with stdio:
    | | Protocol | Hostname | Port |
    |---|---|---|---|
    | Source | HTTPS | your NAS hostname, e.g. `fakenas.local` | 8443 |
-   | Destination | HTTP | `localhost` | 8765 |
+   | Destination | HTTP | `127.0.0.1` | 8765 |
 
 2. In the rule's **Advanced Settings**, raise the proxy read timeout (e.g. 600 s). `compress`, `extract` and `folder_size` wait for the NAS job inside one request, and the default is 60 s.
 3. Control Panel → **Security** → **Certificate** → **Settings**: pick the certificate for the new entry.
@@ -218,6 +218,7 @@ Prompts are ready-made tasks that tell the model which tools to combine. They on
 | `401` / client says unauthorized | The client's token doesn't match `SYNO_MCP_TOKEN`. After changing `.env`, recreate the container (`sudo docker compose up -d`); a plain restart keeps the old settings. |
 | `Cannot reach the NAS at localhost` (container) | Set `SYNO_HOST` to the NAS's LAN IP. |
 | `SYNO_CA_CERT points to … which doesn't exist` (container) | Use `SYNO_CERT_SHA256` instead; the image has no certificate files. |
+| `502` from the reverse proxy | The destination must be `127.0.0.1`, not `localhost`: the container only listens on IPv4 loopback. |
 | Long tool calls fail over HTTPS but work on `127.0.0.1:8765` | The reverse proxy timed out. Raise its read timeout (step 3 above). |
 
 ## Development
